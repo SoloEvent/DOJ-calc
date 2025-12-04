@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOJ Expungement Calculator</title>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+
+        function DollarSignIcon() {
+            return (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="2" x2="12" y2="22"></line>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+            );
+        }
+
+        function DOJExpungementCalculator() {
+            const [nodes, setNodes] = useState([]);
+            const [connections, setConnections] = useState([]);
+            const [dragging, setDragging] = useState(null);
+            const [connecting, setConnecting] = useState(null);
+            const [showAmountModal, setShowAmountModal] = useState(null);
+            const [amountInput, setAmountInput] = useState('1');
+            const [showCustomModal, setShowCustomModal] = useState(false);
+            const [customName, setCustomName] = useState('');
+            const [customPrice, setCustomPrice] = useState('1');
+            const [customColor, setCustomColor] = useState('#3b82f6');
+            const canvasRef = useRef(null);
+
+            useEffect(() => {
+                const startingFee = {
+                    id: Date.now(),
+                    type: 'starting',
+                    x: 200,
+                    y: 200,
+                    value: 2500,
+                    multiplier: 1
+                };
+                
+                const totalNode = {
+                    id: Date.now() + 1,
+                    type: 'result',
+                    x: 200,
+                    y: 350,
+                    value: 0,
+                    multiplier: 1
+                };
+                
+                setNodes([startingFee, totalNode]);
+                setConnections([{ from: startingFee.id, to: totalNode.id, id: Date.now() + 2 }]);
+            }, []);
+
+            const addNode = (type, x = Math.random() * 400 + 100, y = Math.random() * 300 + 100, value = 0, multiplier = 1, customData = null) => {
+                if (type === 'other') {
+                    setShowCustomModal(true);
+                    setCustomName('');
+                    setCustomPrice('1');
+                    setCustomColor('#3b82f6');
+                    return;
+                }
+                
+                if (type === 'felony' || type === 'misdemeanor' || type === 'infraction') {
+                    setShowAmountModal({ type, x, y, value });
+                    setAmountInput('1');
+                    return;
+                }
+                
+                const newNode = {
+                    id: Date.now() + Math.random(),
+                    type,
+                    x,
+                    y,
+                    value: value,
+                    multiplier: multiplier,
+                    customData: customData
+                };
+                setNodes([...nodes, newNode]);
+            };
+
+            const updateNodeValue = (id, value) => {
+                setNodes(nodes.map(n => n.id === id ? { ...n, value: parseFloat(value) || 0 } : n));
+            };
+
+            const updateNodeMultiplier = (id, multiplier) => {
+                setNodes(nodes.map(n => n.id === id ? { ...n, multiplier: parseInt(multiplier) || 1 } : n));
+            };
+
+            const deleteNode = (id) => {
+                setNodes(nodes.filter(n => n.id !== id));
+                setConnections(connections.filter(c => c.from !== id && c.to !== id));
+            };
+
+            const deleteConnection = (connId) => {
+                setConnections(connections.filter(c => c.id !== connId));
+            };
+
+            const handleMouseDown = (e, nodeId) => {
+                if (e.target.tagName === 'INPUT' || e.button !== 0) return;
+                e.stopPropagation();
+                
+                const node = nodes.find(n => n.id === nodeId);
+                
+                if (connecting !== null && node.type === 'result') {
+                    endConnection(nodeId);
+                    return;
+                }
+                
+                setDragging(nodeId);
+            };
+
+            const handleMouseMove = (e) => {
+                if (dragging) {
+                    const rect = canvasRef.current.getBoundingClientRect();
+                    const x = e.clientX - rect.left - 50;
+                    const y = e.clientY - rect.top - 50;
+                    setNodes(nodes.map(n => n.id === dragging ? { ...n, x, y } : n));
+                }
+            };
+
+            const handleMouseUp = () => {
+                setDragging(null);
+            };
+
+            const handleConnect = (nodeId) => {
+                const node = nodes.find(n => n.id === nodeId);
+                
+                if (node.type === 'result') {
+                    return;
+                }
+                
+                if (connecting === null) {
+                    setConnecting(nodeId);
+                } else if (connecting !== nodeId) {
+                    endConnection(nodeId);
+                } else {
+                    setConnecting(null);
+                }
+            };
+
+            const endConnection = (nodeId) => {
+                if (connecting && connecting !== nodeId) {
+                    const exists = connections.some(c => c.from === connecting && c.to === nodeId);
+                    
+                    if (!exists) {
+                        setConnections([...connections, { from: connecting, to: nodeId, id: Date.now() }]);
+                    }
+                }
+                setConnecting(null);
+            };
+
+            const confirmAddWithAmount = () => {
+                const amount = parseInt(amountInput) || 1;
+                const newNode = {
+                    id: Date.now() + Math.random(),
+                    type: showAmountModal.type,
+                    x: showAmountModal.x,
+                    y: showAmountModal.y,
+                    value: showAmountModal.value,
+                    multiplier: amount
+                };
+                setNodes([...nodes, newNode]);
+                setShowAmountModal(null);
+            };
+
+            const confirmCustomNode = () => {
+                if (!customName.trim()) return;
+                
+                const price = parseFloat(customPrice) || 0;
+                const newNode = {
+                    id: Date.now() + Math.random(),
+                    type: 'custom',
+                    x: Math.random() * 400 + 100,
+                    y: Math.random() * 300 + 100,
+                    value: price,
+                    multiplier: 1,
+                    customData: {
+                        name: customName,
+                        color: customColor
+                    }
+                };
+                setNodes([...nodes, newNode]);
+                setShowCustomModal(false);
+            };
+
+            const formatCurrency = (amount) => {
+                if (amount >= 1000) {
+                    return `$${(amount / 1000).toFixed(1)}k`.replace('.0k', 'k');
+                }
+                return `$${amount}`;
+            };
+
+            const calculateResult = (nodeId) => {
+                const node = nodes.find(n => n.id === nodeId);
+                if (!node) return 0;
+                
+                if (node.type === 'felony' || node.type === 'misdemeanor' || node.type === 'infraction' || node.type === 'starting' || node.type === 'custom') {
+                    return node.value * node.multiplier;
+                }
+                
+                if (node.type === 'result') {
+                    const inputs = connections
+                        .filter(c => c.to === nodeId)
+                        .map(c => calculateResult(c.from));
+                    return inputs.reduce((a, b) => a + b, 0);
+                }
+
+                return 0;
+            };
+
+            const drawConnections = () => {
+                return connections.map(conn => {
+                    const from = nodes.find(n => n.id === conn.from);
+                    const to = nodes.find(n => n.id === conn.to);
+                    if (!from || !to) return null;
+
+                    const x1 = from.x + 56;
+                    const y1 = from.y + 112;
+                    const x2 = to.x + 56;
+                    const y2 = to.y;
+
+                    const midY = (y1 + y2) / 2;
+                    const path = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
+
+                    return (
+                        <g key={conn.id}>
+                            <path
+                                d={path}
+                                stroke="#60a5fa"
+                                strokeWidth="8"
+                                fill="none"
+                                opacity="0.3"
+                                filter="blur(4px)"
+                            />
+                            <path
+                                d={path}
+                                stroke="#3b82f6"
+                                strokeWidth="3"
+                                fill="none"
+                                markerEnd="url(#arrowhead)"
+                            />
+                            <circle
+                                cx={(x1 + x2) / 2}
+                                cy={(y1 + y2) / 2}
+                                r="10"
+                                fill="#ef4444"
+                                className="cursor-pointer hover:fill-red-600"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteConnection(conn.id);
+                                }}
+                            />
+                            <text
+                                x={(x1 + x2) / 2}
+                                y={(y1 + y2) / 2 + 4}
+                                textAnchor="middle"
+                                fill="white"
+                                fontSize="14"
+                                fontWeight="bold"
+                                className="pointer-events-none"
+                            >
+                                ×
+                            </text>
+                        </g>
+                    );
+                });
+            };
+
+            const getNodeColor = (type, customData = null) => {
+                if (type === 'custom' && customData) {
+                    return '';
+                }
+                switch(type) {
+                    case 'felony': return 'bg-red-600';
+                    case 'misdemeanor': return 'bg-orange-600';
+                    case 'infraction': return 'bg-yellow-600';
+                    case 'starting': return 'bg-slate-600';
+                    case 'result': return 'bg-amber-600';
+                    default: return 'bg-slate-700';
+                }
+            };
+
+            const getNodeLabel = (type, customData = null) => {
+                if (type === 'custom' && customData) {
+                    return customData.name;
+                }
+                switch(type) {
+                    case 'felony': return 'Felony';
+                    case 'misdemeanor': return 'Misdemeanor';
+                    case 'infraction': return 'Infraction';
+                    case 'starting': return 'Starting Fee';
+                    default: return '';
+                }
+            };
+
+            return (
+                <div className="h-screen flex flex-col bg-slate-900 text-white">
+                    <div className="bg-slate-800 p-4 border-b border-slate-700">
+                        <h1 className="text-2xl font-bold mb-2">DOJ Expungement Calculator</h1>
+                        <p className="text-sm text-slate-400 mb-4">Calculate total costs for expungement fees</p>
+                        
+                        <div className="flex gap-2 mb-3 flex-wrap">
+                            <button onClick={() => addNode('result')} className="px-4 py-2 bg-amber-600 rounded hover:bg-amber-700 flex items-center gap-2">
+                                <DollarSignIcon /> Total
+                            </button>
+                        </div>
+
+                        <div className="flex gap-2 flex-wrap items-center">
+                            <button onClick={() => addNode('felony', undefined, undefined, 5000, 1)} className="px-4 py-2 bg-red-600 rounded hover:bg-red-700">
+                                Felony ($5k)
+                            </button>
+
+                            <button onClick={() => addNode('misdemeanor', undefined, undefined, 2500, 1)} className="px-4 py-2 bg-orange-600 rounded hover:bg-orange-700">
+                                Misdemeanor ($2.5k)
+                            </button>
+
+                            <button onClick={() => addNode('infraction', undefined, undefined, 1000, 1)} className="px-4 py-2 bg-yellow-600 rounded hover:bg-yellow-700">
+                                Infraction ($1k)
+                            </button>
+
+                            <button onClick={() => addNode('other')} className="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700">
+                                Other
+                            </button>
+                        </div>
+                    </div>
+
+                    {showCustomModal && (
+                        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                            <div className="bg-slate-800 p-6 rounded-lg shadow-xl w-96">
+                                <h3 className="text-xl font-bold mb-4">Create Custom Fee</h3>
+                                
+                                <div className="mb-4">
+                                    <label className="block text-sm font-semibold mb-2">Fee Name</label>
+                                    <input
+                                        type="text"
+                                        value={customName}
+                                        onChange={(e) => setCustomName(e.target.value)}
+                                        placeholder="e.g., Court Filing"
+                                        className="w-full px-4 py-2 bg-slate-700 rounded"
+                                        autoFocus
+                                    />
+                                </div>
+
+                                <div className="mb-4">
+                                    <label className="block text-sm font-semibold mb-2">Price (in dollars)</label>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-lg">$</span>
+                                        <input
+                                            type="number"
+                                            value={customPrice}
+                                            onChange={(e) => setCustomPrice(e.target.value)}
+                                            step="1"
+                                            min="0"
+                                            placeholder="e.g., 200 or 2500"
+                                            className="flex-1 px-4 py-2 bg-slate-700 rounded"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="mb-4">
+                                    <label className="block text-sm font-semibold mb-2">Color</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="color"
+                                            value={customColor}
+                                            onChange={(e) => setCustomColor(e.target.value)}
+                                            className="w-16 h-10 rounded cursor-pointer"
+                                        />
+                                        <div 
+                                            className="flex-1 h-10 rounded"
+                                            style={{ backgroundColor: customColor }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={confirmCustomNode}
+                                        disabled={!customName.trim()}
+                                        className="flex-1 px-4 py-2 bg-emerald-600 rounded hover:bg-emerald-700 disabled:bg-slate-600 disabled:cursor-not-allowed"
+                                    >
+                                        Create
+                                    </button>
+                                    <button
+                                        onClick={() => setShowCustomModal(false)}
+                                        className="flex-1 px-4 py-2 bg-slate-600 rounded hover:bg-slate-700"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {showAmountModal && (
+                        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                            <div className="bg-slate-800 p-6 rounded-lg shadow-xl">
+                                <h3 className="text-xl font-bold mb-4">How many {getNodeLabel(showAmountModal.type)}s?</h3>
+                                <input
+                                    type="number"
+                                    value={amountInput}
+                                    onChange={(e) => setAmountInput(e.target.value)}
+                                    min="1"
+                                    className="w-full px-4 py-2 bg-slate-700 rounded text-lg text-center mb-4"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') confirmAddWithAmount();
+                                    }}
+                                />
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={confirmAddWithAmount}
+                                        className="flex-1 px-4 py-2 bg-emerald-600 rounded hover:bg-emerald-700"
+                                    >
+                                        Add
+                                    </button>
+                                    <button
+                                        onClick={() => setShowAmountModal(null)}
+                                        className="flex-1 px-4 py-2 bg-slate-600 rounded hover:bg-slate-700"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div
+                        ref={canvasRef}
+                        className="flex-1 relative overflow-hidden bg-slate-950"
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                    >
+                        <svg className="absolute inset-0 w-full h-full pointer-events-auto" style={{ zIndex: 0 }}>
+                            <defs>
+                                <marker id="arrowhead" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+                                    <polygon points="0 0, 12 6, 0 12" fill="#3b82f6" />
+                                </marker>
+                            </defs>
+                            {drawConnections()}
+                        </svg>
+
+                        {nodes.map(node => {
+                            const isResult = node.type === 'result';
+                            const isFee = ['felony', 'misdemeanor', 'infraction', 'starting', 'custom'].includes(node.type);
+                            const result = isResult ? calculateResult(node.id) : null;
+                            const bgColor = getNodeColor(node.type, node.customData);
+                            const customStyle = node.type === 'custom' && node.customData ? { backgroundColor: node.customData.color } : {};
+
+                            return (
+                                <div
+                                    key={node.id}
+                                    className={`absolute w-28 h-28 rounded-lg shadow-lg cursor-move ${
+                                        bgColor
+                                    } flex flex-col items-center justify-center border-2 ${
+                                        connecting === node.id ? 'border-yellow-400 shadow-yellow-400/50' : 'border-transparent'
+                                    }`}
+                                    style={{ left: node.x, top: node.y, zIndex: 10, ...customStyle }}
+                                    onMouseDown={(e) => handleMouseDown(e, node.id)}
+                                >
+                                    <button
+                                        onClick={() => deleteNode(node.id)}
+                                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full text-xs hover:bg-red-600 z-20"
+                                    >
+                                        ×
+                                    </button>
+
+                                    {isResult ? (
+                                        <>
+                                            <div className="text-sm font-semibold">TOTAL</div>
+                                            <div className="text-2xl font-bold">{formatCurrency(result)}</div>
+                                            {connecting !== null && (
+                                                <div className="absolute -bottom-8 text-xs text-yellow-400 font-semibold animate-pulse">
+                                                    Click here to connect
+                                                </div>
+                                            )}
+                                        </>
+                                    ) : isFee ? (
+                                        <>
+                                            <div className="text-xs font-semibold mb-1">{getNodeLabel(node.type, node.customData)}</div>
+                                            {node.type === 'custom' ? (
+                                                <>
+                                                    <div className="flex items-center gap-1">
+                                                        <span className="text-sm">$</span>
+                                                        <input
+                                                            type="number"
+                                                            value={node.value}
+                                                            onChange={(e) => updateNodeValue(node.id, parseFloat(e.target.value) || 0)}
+                                                            className="w-16 text-center bg-black bg-opacity-30 rounded px-1 py-0.5 text-sm font-bold"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            step="1"
+                                                        />
+                                                    </div>
+                                                    <div className="text-xs mt-1 font-bold">{formatCurrency(node.value * node.multiplier)}</div>
+                                                </>
+                                            ) : (
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-sm">$</span>
+                                                    <input
+                                                        type="number"
+                                                        value={node.value / 1000}
+                                                        onChange={(e) => updateNodeValue(node.id, (parseFloat(e.target.value) || 0) * 1000)}
+                                                        className="w-12 text-center bg-black bg-opacity-30 rounded px-1 py-0.5 text-lg font-bold"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        step="0.1"
+                                                    />
+                                                    <span className="text-lg font-bold">k</span>
+                                                </div>
+                                            )}
+                                            <div className="flex items-center gap-1 mt-1">
+                                                <input
+                                                    type="number"
+                                                    value={node.multiplier}
+                                                    onChange={(e) => updateNodeMultiplier(node.id, e.target.value)}
+                                                    className="w-10 text-center bg-black bg-opacity-30 rounded px-1 py-0.5 text-sm font-bold"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    min="1"
+                                                />
+                                                <span className="text-sm font-bold">×</span>
+                                            </div>
+                                        </>
+                                    ) : null}
+
+                                    {isFee && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleConnect(node.id);
+                                            }}
+                                            className={`absolute -bottom-8 px-3 py-1 rounded text-xs z-20 ${
+                                                connecting === node.id ? 'bg-yellow-500' : 'bg-cyan-600 hover:bg-cyan-700'
+                                            }`}
+                                        >
+                                            {connecting === node.id ? 'Connecting...' : 'Connect'}
+                                        </button>
+                                    )}
+                                </div>
+                            );
+                        })}
+
+                        {nodes.length <= 2 && (
+                            <div className="absolute inset-0 flex items-center justify-center text-slate-400 pointer-events-none">
+                                <div className="text-center">
+                                    <p className="text-xl mb-3">DOJ Expungement Fee Calculator</p>
+                                    <p className="text-sm mb-1">• Click preset buttons (Felony, Misdemeanor, Infraction)</p>
+                                    <p className="text-sm mb-1">• Enter the quantity when prompted</p>
+                                    <p className="text-sm mb-1">• Connect fees to the Total node to sum them up</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<DOJExpungementCalculator />, document.getElementById('root'));
+    </script>
+</body>
+</html>
